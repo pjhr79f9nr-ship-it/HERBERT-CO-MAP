@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Herbert &amp; Co" />
+<meta name="theme-color" content="#0A0A0C" />
+<meta name="mobile-web-app-capable" content="yes" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+<title>Champagne Herbert &amp; Co. — Carte des points de vente</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400..800;1,400..800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --black:#0A0A0C;
+    --surface:#15151A;
+    --surface-2:#1E1E25;
+    --line: rgba(255,255,255,0.08);
+    --line-strong: rgba(255,255,255,0.14);
+    --blue:#3080E1;
+    --blue-deep:#2569BD;
+    --logo-blue:#4F7FDB;
+    --white:#FAFAFA;
+    --grey:#6B7280;
+    --grey-light:#9CA3AF;
+    --red:#EF4444;
+    --vh: 100vh;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ margin:0; padding:0; height:100%; background:var(--black); overscroll-behavior:none; }
+  body{
+    font-family:'Inter', -apple-system, sans-serif;
+    color:var(--white);
+    width:100%;
+    height:var(--vh);
+    position:fixed;
+    overflow:hidden;
+  }
+  .display{
+    font-family:'Barlow Condensed', sans-serif;
+    font-weight:800;
+    font-style:italic;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    display:inline-block;
+  }
+
+  /* ---------- TOP BAR ---------- */
+  #topbar{
+    position:absolute; top:0; left:0; right:0;
+    z-index:500;
+    padding: calc(env(safe-area-inset-top) + 14px) 16px 44px 16px;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+    background:linear-gradient(to bottom, rgba(10,10,12,0.97) 0%, rgba(10,10,12,0) 100%);
+    pointer-events:none;
+  }
+  #brand{
+    line-height:0.88;
+    flex-shrink:1; min-width:0;
+    pointer-events:none;
+  }
+  /* Logo image (si logo.png présent dans le même dossier) */
+  #brand-logo{
+    height:58px; width:auto; display:none;
+  }
+  /* Texte affiché par défaut, masqué si logo.png charge */
+  #brand-text{ display:block; }
+  #brand .b-champagne{
+    font-size:13px; color:var(--logo-blue);
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:800; font-style:italic;
+    text-transform:uppercase; letter-spacing:1.2px;
+    display:block; margin-bottom:1px;
+  }
+  #brand .b-herbert{
+    font-size:23px; color:var(--logo-blue);
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:800; font-style:italic;
+    text-transform:uppercase; letter-spacing:0.3px;
+    display:block; line-height:0.95; white-space:nowrap;
+  }
+  #topbar-right{
+    display:flex; flex-direction:column; align-items:flex-end; gap:8px;
+    pointer-events:auto; flex-shrink:0;
+  }
+  #counter{
+    font-size:12px; font-weight:600; color:var(--white);
+    background:var(--surface);
+    border:0.5px solid var(--line-strong);
+    border-radius:8px;
+    padding:8px 12px;
+    white-space:nowrap;
+    margin-top:2px;
+  }
+  #counter b{ color:var(--blue); font-weight:700; }
+
+  /* ---------- MAP ---------- */
+  #map{ position:absolute; inset:0; z-index:1; background:var(--black); }
+  .leaflet-control-attribution{ display:none !important; }
+  .leaflet-control-zoom{ display:none; }
+  .leaflet-container{ background:var(--black); }
+
+  /* dot marker */
+  .hc-marker{
+    width:14px; height:14px;
+    border-radius:50%;
+    background:var(--blue);
+    border:2px solid var(--black);
+    box-shadow: 0 0 0 4px rgba(48,128,225,0.18), 0 2px 6px rgba(0,0,0,0.5);
+  }
+  .hc-marker.selected{
+    width:18px; height:18px;
+    background:var(--white);
+    box-shadow: 0 0 0 6px rgba(255,255,255,0.2), 0 2px 6px rgba(0,0,0,0.5);
+  }
+
+  /* ---------- BOTTOM SHEET ---------- */
+  #sheet{
+    position:absolute; left:0; right:0; bottom:0;
+    z-index:600;
+    background:var(--surface);
+    border-top:1px solid var(--line-strong);
+    border-radius:16px 16px 0 0;
+    transform: translateY(calc(100% - 118px));
+    transition: transform 0.35s cubic-bezier(.32,.72,0,1);
+    max-height: 86vh;
+    display:flex; flex-direction:column;
+    touch-action:none;
+  }
+  #sheet.expanded{ transform: translateY(0); }
+
+  #sheet-handle{
+    display:flex; flex-direction:column; align-items:center;
+    padding: 10px 0 6px 0; cursor:grab; flex-shrink:0;
+  }
+  #sheet-grip{
+    width:36px; height:4px; border-radius:2px; background:var(--line-strong);
+  }
+  #sheet-title-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 6px 20px 14px 20px; flex-shrink:0;
+  }
+  #sheet-title-row h2{ font-size:24px; margin:0; color:var(--white); font-weight:400; }
+  #sheet-title-row h2 .display{ color:var(--blue); }
+  #add-btn{
+    width:38px; height:38px; border-radius:8px;
+    background:var(--blue); color:var(--black);
+    display:flex; align-items:center; justify-content:center;
+    border:none; font-size:22px; font-weight:700; line-height:1; cursor:pointer; flex-shrink:0;
+  }
+  #add-btn:active{ background:var(--blue-deep); }
+
+  #search-row{ padding: 0 20px 14px 20px; flex-shrink:0; }
+  #search-input{
+    width:100%; height:42px; border-radius:8px;
+    border:1px solid var(--line-strong);
+    background:var(--surface-2); color:var(--white);
+    padding:0 14px; font-size:14px; font-family:inherit; font-weight:500; outline:none;
+  }
+  #search-input::placeholder{ color:var(--grey); font-weight:400; }
+  #search-input:focus{ border-color:var(--blue); }
+
+  #list{
+    overflow-y:auto;
+    padding: 0 12px calc(env(safe-area-inset-bottom) + 20px) 12px;
+    flex:1;
+  }
+  .place-row{
+    display:flex; align-items:center; gap:12px;
+    padding:13px 10px; border-radius:8px; cursor:pointer;
+    border-bottom:1px solid var(--line);
+  }
+  .place-row:last-child{ border-bottom:none; }
+  .place-row:active{ background:var(--surface-2); }
+  .place-icon{
+    width:36px; height:36px; flex-shrink:0; border-radius:8px;
+    background:var(--surface-2); border:1px solid var(--line-strong);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .place-icon svg{ width:18px; height:18px; }
+  .place-info{ flex:1; min-width:0; }
+  .place-name{ font-size:14.5px; font-weight:600; margin:0; color:var(--white); }
+  .place-meta{ font-size:12.5px; color:var(--grey-light); margin:3px 0 0 0; }
+  .place-meta .type-tag{ color:var(--blue); font-weight:600; }
+  .place-chevron{ color:var(--grey); font-size:18px; flex-shrink:0; font-weight:700; }
+  #empty-state{
+    text-align:center; padding:40px 20px; color:var(--grey-light);
+    font-size:13.5px; display:none; line-height:1.6;
+  }
+  #empty-state.show{ display:block; }
+  #empty-state .display{ font-size:20px; display:block; margin-bottom:8px; color:var(--blue); }
+  #loading-state{ text-align:center; padding:40px 20px; color:var(--grey-light); font-size:13.5px; }
+
+  /* ---------- DETAIL / EDIT ---------- */
+  #detail{
+    position:absolute; inset:0; z-index:700;
+    background:var(--surface);
+    display:flex; flex-direction:column;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(.32,.72,0,1);
+    border-radius:16px 16px 0 0;
+  }
+  #detail.open{ transform: translateY(0); }
+  #detail-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 16px 16px 12px 16px; flex-shrink:0;
+    border-bottom:1px solid var(--line);
+  }
+  #detail-cancel, #detail-save{
+    font-size:14.5px; font-weight:600; border:none; background:none; cursor:pointer; padding:6px 4px;
+  }
+  #detail-cancel{ color:var(--grey-light); }
+  #detail-save{ color:var(--blue); }
+  #detail-title{ font-size:18px; font-weight:400; margin:0; color:var(--white); }
+  #detail-body{
+    flex:1; overflow-y:auto;
+    padding: 16px 20px calc(env(safe-area-inset-bottom) + 24px) 20px;
+  }
+  .field{ margin-bottom:16px; }
+  .field label{
+    display:block; font-size:11px; font-weight:700; letter-spacing:1.5px;
+    text-transform:uppercase; color:var(--grey-light); margin-bottom:7px;
+  }
+  .field input, .field select, .field textarea{
+    width:100%; border-radius:8px; border:1px solid var(--line-strong);
+    background:var(--surface-2); color:var(--white);
+    padding:12px 13px; font-size:15px; font-family:inherit; outline:none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{ border-color:var(--blue); }
+  .field textarea{ resize:vertical; min-height:64px; }
+  .field select{ appearance:none; -webkit-appearance:none; }
+  .field-hint{ font-size:12px; color:var(--grey-light); margin-top:6px; }
+  #position-field label{ display:flex; align-items:center; justify-content:space-between; }
+  #position-field .pos-action{ color:var(--blue); font-weight:600; font-size:11px; cursor:pointer; }
+  #delete-btn{
+    width:100%; padding:13px; border-radius:8px;
+    border:1px solid rgba(239,68,68,0.3);
+    background:rgba(239,68,68,0.08);
+    color:var(--red); font-size:14.5px; font-weight:600;
+    margin-top:8px; cursor:pointer;
+  }
+  #delete-btn:active{ background:rgba(239,68,68,0.16); }
+
+  /* ---------- TOAST ---------- */
+  #toast{
+    position:absolute; left:50%; bottom:140px;
+    transform: translateX(-50%) translateY(20px);
+    background:var(--white); color:var(--black);
+    font-size:13.5px; font-weight:600;
+    padding:11px 18px; border-radius:8px;
+    z-index:900; opacity:0;
+    transition: opacity 0.25s, transform 0.25s;
+    pointer-events:none; white-space:nowrap;
+  }
+  #toast.show{ opacity:1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- PIN CROSSHAIR ---------- */
+  #pin-crosshair{
+    position:absolute; top:50%; left:50%;
+    transform: translate(-50%, -50%);
+    z-index:400; pointer-events:none; display:none;
+  }
+  #pin-crosshair.show{ display:flex; }
+  .pin-crosshair-mark{
+    width:32px; height:32px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--blue); border-radius:50%;
+    border:3px solid var(--white);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    transform: translateY(-50%);
+  }
+  #pin-helper{
+    position:absolute; left:0; right:0;
+    top: calc(env(safe-area-inset-top) + 90px);
+    z-index:500; text-align:center; pointer-events:none; display:none;
+  }
+  #pin-helper.show{ display:block; }
+  #pin-helper span{
+    background:var(--blue); color:var(--black);
+    font-size:13px; font-weight:700;
+    padding:9px 18px; border-radius:8px; display:inline-block;
+  }
+
+
+  /* ---------- LEAFLET POPUP OVERRIDES ---------- */
+  .leaflet-popup-content-wrapper{
+    background: var(--surface) !important;
+    border: 1px solid var(--line-strong) !important;
+    border-radius: 14px !important;
+    padding: 0 !important;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.75) !important;
+    color: var(--white);
+  }
+  .leaflet-popup-tip-container{ margin-top:-1px; }
+  .leaflet-popup-tip{ background: var(--surface) !important; }
+  .leaflet-popup-content{ margin: 0 !important; }
+  .leaflet-popup-close-button{
+    color: rgba(255,255,255,0.85) !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    width: 28px !important; height: 28px !important;
+    top: 8px !important; right: 8px !important;
+    background: rgba(0,0,0,0.35) !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 10;
+  }
+  .leaflet-popup-close-button:hover{ color:#fff !important; background:rgba(0,0,0,0.6) !important; }
+
+  /* ---------- PLACE POPUP ---------- */
+  .hc-pop{ width: 270px; font-family:'Inter', -apple-system, sans-serif; }
+
+  .hc-pop-photo{
+    width:100%; height:145px;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; position:relative; flex-shrink:0;
+    background-size:cover;
+  }
+  .hc-pop-photo img{
+    width:100%; height:100%; object-fit:cover; display:block;
+  }
+  .hc-pop-photo::before{
+    content:'';
+    position:absolute; inset:0;
+    background-image:
+      repeating-linear-gradient(135deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 14px),
+      radial-gradient(circle at 78% 18%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 55%);
+    pointer-events:none;
+  }
+  .hc-pop-photo-watermark{
+    position:absolute; left:-6px; bottom:-20px;
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:800; font-style:italic; text-transform:uppercase;
+    font-size:46px; letter-spacing:0.5px; line-height:0.85;
+    color:rgba(255,255,255,0.09);
+    white-space:nowrap; pointer-events:none;
+  }
+  .hc-pop-photo-placeholder{
+    position:relative; z-index:1;
+    width:62px; height:62px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,0.14);
+    border:1px solid rgba(255,255,255,0.22);
+    box-shadow:0 4px 14px rgba(0,0,0,0.25);
+  }
+  .hc-pop-photo-placeholder svg{ width:30px; height:30px; }
+
+  .hc-pop-body{ padding: 12px 14px 14px; }
+
+  .hc-pop-type-row{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;
+  }
+  .hc-pop-type-tag{
+    font-size:10px; font-weight:700; letter-spacing:1.3px;
+    text-transform:uppercase; color:var(--blue);
+  }
+.hc-pop-name{
+    font-size:15px; font-weight:700; color:var(--white);
+    margin:0 0 3px; line-height:1.3;
+  }
+  .hc-pop-loc{ font-size:12px; color:var(--grey-light); margin:0 0 1px; }
+  .hc-pop-addr{ font-size:12px; color:var(--grey-light); margin:0 0 1px; }
+  .hc-pop-notes{
+    font-size:11.5px; color:var(--grey); font-style:italic;
+    margin-top:8px; padding-top:8px;
+    border-top:1px solid var(--line); line-height:1.5;
+  }
+  .hc-pop-edit{
+    display:block; width:100%; padding:9px 0;
+    border-radius:7px; border:none;
+    background:var(--blue); color:var(--black);
+    font-size:13px; font-weight:700;
+    cursor:pointer; margin-top:11px;
+    font-family:inherit; letter-spacing:0.2px;
+  }
+  .hc-pop-edit:active{ background:var(--blue-deep); }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="topbar">
+  <div id="brand">
+    <!-- Dépose logo.png dans le même dossier pour utiliser le vrai logo -->
+    <img id="brand-logo" src="logo.png" alt="Champagne Herbert &amp; Co"
+         onload="this.style.display='block'; document.getElementById('brand-text').style.display='none';"
+         onerror="this.style.display='none';" />
+    <div id="brand-text">
+      <span class="b-champagne">Champagne</span>
+      <span class="b-herbert">Herbert &amp; Co.</span>
+    </div>
+  </div>
+  <div id="topbar-right">
+    <div id="counter"><b id="count-num">–</b> points de vente</div>
+  </div>
+</div>
+
+<div id="pin-helper"><span>Déplacez la carte pour placer le repère</span></div>
+<div id="pin-crosshair"><div class="pin-crosshair-mark"></div></div>
+
+<div id="sheet" class="expanded">
+  <div id="sheet-handle"><div id="sheet-grip"></div></div>
+  <div id="sheet-title-row">
+    <h2>Nos <span class="display">Adresses</span></h2>
+    <button id="add-btn" aria-label="Ajouter un lieu">+</button>
+  </div>
+  <div id="search-row">
+    <input id="search-input" type="text" placeholder="Rechercher une ville, un pays, un lieu…" />
+  </div>
+  <div id="list">
+    <div id="loading-state">Chargement des points de vente…</div>
+    <div id="empty-state">
+      <span class="display">Aucun lieu</span>
+      Touchez + pour ajouter votre premier point de vente.
+    </div>
+  </div>
+</div>
+
+<div id="detail">
+  <div id="detail-header">
+    <button id="detail-cancel">Annuler</button>
+    <h3 id="detail-title">Nouveau lieu</h3>
+    <button id="detail-save">Enregistrer</button>
+  </div>
+  <div id="detail-body">
+    <div class="field">
+      <label>Nom du lieu</label>
+      <input id="f-name" type="text" placeholder="ex. Le Bristol Paris" />
+    </div>
+    <div class="field">
+      <label>Type</label>
+      <select id="f-type">
+        <option value="restaurant">Restaurant</option>
+        <option value="hotel">Hôtel</option>
+        <option value="caviste">Caviste / Cave à vins</option>
+        <option value="bar">Bar à champagne</option>
+        <option value="epicerie">Épicerie fine</option>
+        <option value="autre">Autre</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Ville</label>
+      <input id="f-city" type="text" placeholder="ex. Paris" />
+    </div>
+    <div class="field">
+      <label>Pays</label>
+      <input id="f-country" type="text" placeholder="ex. France" />
+    </div>
+    <div class="field">
+      <label>Adresse (optionnel)</label>
+      <input id="f-address" type="text" placeholder="Adresse complète" />
+    </div>
+    <div class="field">
+      <label>Notes (optionnel)</label>
+      <textarea id="f-notes" placeholder="Cuvées disponibles, contact, remarques…"></textarea>
+    </div>
+    <div class="field" id="position-field">
+      <label>Position sur la carte <span class="pos-action" id="pos-action">Placer manuellement</span></label>
+      <div class="field-hint" id="position-status">Position automatique selon la ville saisie.</div>
+    </div>
+    <button id="delete-btn" style="display:none;">Supprimer ce lieu</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function(){
+
+  /* ── VH fix ─────────────────────────────────────────────────────────── */
+  function setVH(){ document.documentElement.style.setProperty('--vh', window.innerHeight+'px'); }
+  setVH();
+  window.addEventListener('resize', setVH);
+
+  /* ── CONFIG ─────────────────────────────────────────────────────────── */
+  const STORAGE_KEY = 'herbertco:places';
+
+  /* ── DONNÉES PAR DÉFAUT ──────────────────────────────────────────────── */
+  const DEFAULT_PLACES = [{"id":"p_bubble_bistro_autriche","name":"BUBBLE BISTRO","type":"epicerie","city":"","country":"Autriche","address":"","notes":"Distribué par MARTIN PILLENS","lat":47.5162,"lng":14.5501},{"id":"p_alchemist_danemark","name":"Alchemist","type":"restaurant","city":"Copenhague","country":"Danemark","address":"","notes":"Distribué par CRUVIN","lat":55.6761,"lng":12.5683},{"id":"p_goldfinch_danemark","name":"Goldfinch","type":"restaurant","city":"Copenhague","country":"Danemark","address":"","notes":"Distribué par CRUVIN","lat":55.65331,"lng":12.56302},{"id":"p_goma_danemark","name":"GOMA","type":"restaurant","city":"Copenhague","country":"Danemark","address":"","notes":"Distribué par CRUVIN","lat":55.69112,"lng":12.54822},{"id":"p_host_danemark","name":"HOST","type":"restaurant","city":"Copenhague","country":"Danemark","address":"","notes":"Distribué par CRUVIN","lat":55.65296,"lng":12.59929},{"id":"p_anduma_danemark","name":"Anduma","type":"restaurant","city":"Copenhague","country":"Danemark","address":"","notes":"Distribué par CRUVIN","lat":55.72342,"lng":12.5581},{"id":"p_emirates_palace_mandarin_oriental_tasca_","name":"EMIRATES PALACE MANDARIN ORIENTAL - Tasca by José Avillez","type":"restaurant","city":"Dubaï","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":25.2048,"lng":55.2708},{"id":"p_zuma_emirats","name":"ZUMA","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.4539,"lng":54.3773},{"id":"p_emirates_palace_mandarin_oriental_broadw","name":"EMIRATES PALACE MANDARIN ORIENTAL - Broadway","type":"bar","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.4439,"lng":54.36213},{"id":"p_emirates_palace_mandarin_oriental_talea_","name":"EMIRATES PALACE MANDARIN ORIENTAL - Talea by Antonio Guida *  1 ETOILE MICHELIN","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.47427,"lng":54.3609},{"id":"p_emirates_palace_mandarin_oriental_strawf","name":"EMIRATES PALACE MANDARIN ORIENTAL - Strawfire by Ross Shonhan","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.42723,"lng":54.3809},{"id":"p_emirates_palace_mandarin_oriental_hakkas","name":"EMIRATES PALACE MANDARIN ORIENTAL - Hakkasan *  1 ETOILE MICHELIN","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.49571,"lng":54.36222},{"id":"p_emirates_palace_mandarin_oriental_martab","name":"EMIRATES PALACE MANDARIN ORIENTAL - Martabaan by Hemant Oberoi","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.42652,"lng":54.33977},{"id":"p_emirates_palace_mandarin_oriental_sand_k","name":"EMIRATES PALACE MANDARIN ORIENTAL - Sand & Koal","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.46893,"lng":54.41709},{"id":"p_emirates_palace_mandarin_oriental_lebane","name":"EMIRATES PALACE MANDARIN ORIENTAL - Lebanese Terrace","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.43712,"lng":54.31242},{"id":"p_emirates_palace_mandarin_oriental_episod","name":"EMIRATES PALACE MANDARIN ORIENTAL - Episodes","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.4949,"lng":54.33566},{"id":"p_emirates_palace_mandarin_oriental_vend_m","name":"EMIRATES PALACE MANDARIN ORIENTAL - Vendôme","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.36935,"lng":54.40127},{"id":"p_emirates_palace_mandarin_oriental_alma_e","name":"EMIRATES PALACE MANDARIN ORIENTAL - ALMA","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.51715,"lng":54.3696},{"id":"p_emirates_palace_mandarin_oriental_caf_fo","name":"EMIRATES PALACE MANDARIN ORIENTAL - Café Fountain","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.37044,"lng":54.32567},{"id":"p_emirates_palace_mandarin_oriental_cascad","name":"EMIRATES PALACE MANDARIN ORIENTAL - Cascades","type":"restaurant","city":"Abou Dabi","country":"Émirats arabes unis","address":"","notes":"Distribué par CHAMPAVIN","lat":24.50365,"lng":54.46891},{"id":"p_succul_wine_france","name":"SUCCUL WINE","type":"epicerie","city":"Reims","country":"France","address":"","notes":"Distribué par SUCCUL","lat":49.2583,"lng":4.0317},{"id":"p_maree_haute_vins_naturels_france","name":"MAREE HAUTE - VINS NATURELS","type":"epicerie","city":"Saint-Pierre-d'Oléron","country":"France","address":"","notes":"Distribué par MAREE HAUTE","lat":45.951,"lng":-1.305},{"id":"p_bubbles_bliss_france","name":"BUBBLES BLISS","type":"bar","city":"Paris","country":"France","address":"","notes":"Distribué par BUBBLE BLISS","lat":48.8566,"lng":2.3522},{"id":"p_sas_les_oeillets_france","name":"SAS LES OEILLETS","type":"restaurant","city":"Nice","country":"France","address":"","notes":"Distribué par LES ŒILLETS","lat":43.7102,"lng":7.262},{"id":"p_racine_france","name":"RACINE","type":"restaurant","city":"Reims","country":"France","address":"","notes":"Distribué par RACINE","lat":49.23855,"lng":4.01785},{"id":"p_le_tast_fromage_france","name":"LE TAST FROMAGE","type":"caviste","city":"Beaune","country":"France","address":"","notes":"Distribué par LE TAST FROMAGE","lat":47.025,"lng":4.8367},{"id":"p_magnum_france","name":"MAGNUM","type":"autre","city":"Beaune","country":"France","address":"","notes":"Distribué par MAGNUM","lat":47.025,"lng":4.81297},{"id":"p_prise_de_mousse_france","name":"PRISE DE MOUSSE","type":"autre","city":"Reims","country":"France","address":"","notes":"Distribué par PRISE DE MOUSSE","lat":49.28173,"lng":4.01693},{"id":"p_mtv_grands_vins_france","name":"MTV GRANDS VINS","type":"autre","city":"Aubagne","country":"France","address":"","notes":"Distribué par MTV GRANDS VINS","lat":43.293,"lng":5.57},{"id":"p_la_cave_saint_corneille_france","name":"LA CAVE SAINT-CORNEILLE","type":"caviste","city":"Compiègne","country":"France","address":"","notes":"Distribué par LA CAVE SAINT CORNEILLE","lat":49.418,"lng":2.826},{"id":"p_ristorante_21_1_italie","name":"Ristorante 21.1","type":"restaurant","city":"Alba","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":44.7009,"lng":8.0353},{"id":"p_soma_enoteca_italie","name":"Soma Enoteca","type":"bar","city":"Altamura","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":40.829,"lng":16.553},{"id":"p_hotel_belvedere_italie","name":"Hotel Belvedere","type":"restaurant","city":"Bellagio","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.987,"lng":9.259},{"id":"p_ristorante_nuovo_nando_italie","name":"Ristorante Nuovo Nando","type":"restaurant","city":"Brescia","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.5416,"lng":10.2118},{"id":"p_hermosa_wine_bar_italie","name":"Hermosa Wine Bar","type":"bar","city":"Brescia","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.5416,"lng":10.18853},{"id":"p_hotel_elephant_italie","name":"Hotel Elephant","type":"restaurant","city":"Bressanone","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":46.7167,"lng":11.6553},{"id":"p_ristorante_venissa_1_etoile_michelin_ita","name":"Ristorante Venissa *  1 ETOILE MICHELIN","type":"restaurant","city":"Burano","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.4854,"lng":12.417},{"id":"p_ristorante_piazzetta_mil_2_etoiles_miche","name":"Ristorante Piazzetta Milù ** 2 ETOILES MICHELIN","type":"restaurant","city":"Castellamare di Stabia","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":40.7027,"lng":14.483},{"id":"p_villa_d_este_italie","name":"Villa d'Este","type":"restaurant","city":"Cernobbio","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.8333,"lng":9.0833},{"id":"p_bar_franciacorta_italie","name":"Bar Franciacorta","type":"restaurant","city":"Cortefranca","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.628,"lng":9.974},{"id":"p_ristorante_gino_italie","name":"Ristorante Gino","type":"restaurant","city":"Lucca","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":43.8429,"lng":10.5027},{"id":"p_enoteca_castello_italie","name":"Enoteca Castello","type":"restaurant","city":"Mariano Comense","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.718,"lng":9.186},{"id":"p_ristorante_laurence_italie","name":"Ristorante Laurence","type":"restaurant","city":"Massa Carrara","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":44.0367,"lng":10.141},{"id":"p_snow_wine_bar_italie","name":"Snow Wine Bar","type":"restaurant","city":"Massa Carrara","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":44.0367,"lng":10.12369},{"id":"p_ristorante_onest_italie","name":"Ristorante Onest","type":"restaurant","city":"Milano","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.4642,"lng":9.19},{"id":"p_langosteria_italie","name":"Langosteria","type":"bar","city":"Milano","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.44744,"lng":9.17998},{"id":"p_enoteca_peck_italie","name":"Enoteca Peck","type":"restaurant","city":"Milano","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.4839,"lng":9.17752},{"id":"p_temp_enoteca_italie","name":"Temp Enoteca","type":"restaurant","city":"Milano","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.4642,"lng":9.22129},{"id":"p_ristorante_bentoteca_italie","name":"Ristorante Bentoteca","type":"restaurant","city":"Milano","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.50267,"lng":9.17061},{"id":"p_ristorante_waby_italie","name":"Ristorante Waby","type":"restaurant","city":"Milano","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.42533,"lng":9.16949},{"id":"p_enoteca_la_cantinetta_di_barun_italie","name":"Enoteca La Cantinetta di Barun","type":"restaurant","city":"Neive","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":44.7,"lng":8.167},{"id":"p_ristorante_ex_foro_italie","name":"Ristorante Ex Foro","type":"restaurant","city":"Padova","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.4064,"lng":11.8768},{"id":"p_vineco_italie","name":"Vineco","type":"restaurant","city":"Palazzolo sull'Oglio","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.598,"lng":9.892},{"id":"p_enoteca_canalino_italie","name":"Enoteca Canalino","type":"restaurant","city":"Reggio Emilia","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":44.6979,"lng":10.6309},{"id":"p_osteria_dello_strecciolo_italie","name":"Osteria dello Strecciolo","type":"restaurant","city":"Robbiate","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":45.715,"lng":9.376},{"id":"p_enoteca_uve_nude_italie","name":"Enoteca Uve Nude","type":"bar","city":"Salerno","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":40.6824,"lng":14.7681},{"id":"p_ristorante_balin_italie","name":"Ristorante Balin","type":"restaurant","city":"Sestri Levante","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":44.273,"lng":9.396},{"id":"p_enoteca_le_clos_italie","name":"Enoteca Le Clos","type":"bar","city":"Terni","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":42.5636,"lng":12.6427},{"id":"p_ristorante_la_torre_del_saracino_2_etoil","name":"Ristorante La Torre del Saracino ** 2 ETOILES MICHELIN","type":"restaurant","city":"Vico Equense","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":40.66,"lng":14.435},{"id":"p_antica_cantina_di_bacco_italie","name":"Antica Cantina di Bacco","type":"restaurant","city":"Vinci","country":"Italie","address":"","notes":"Distribué par SUN IMPORT","lat":43.78,"lng":10.925},{"id":"p_truff_le_pig_letonie","name":"TRUFF LE PIG","type":"restaurant","city":"Riga","country":"Lettonie","address":"","notes":"Distribué par MARTS AUGUST","lat":56.8796,"lng":24.6032},{"id":"p_orexis_french_japon","name":"OREXIS FRENCH","type":"restaurant","city":"Tokyo","country":"Japon","address":"","notes":"Distribué par VIVIT","lat":35.6762,"lng":139.6503},{"id":"p_luonto_tokyo_japon","name":"LUONTO TOKYO","type":"restaurant","city":"Tokyo","country":"Japon","address":"","notes":"Distribué par VIVIT","lat":35.66073,"lng":139.63328},{"id":"p_mare_wine_japon","name":"MARE WINE","type":"restaurant","city":"Tokyo","country":"Japon","address":"","notes":"Distribué par VIVIT","lat":35.70636,"lng":139.64354},{"id":"p_kagari_wine_bar_japon","name":"KAGARI WINE BAR","type":"restaurant","city":"Tokyo","country":"Japon","address":"","notes":"Distribué par VIVIT","lat":35.66344,"lng":139.68565},{"id":"p_new_valley_tokyo_japon","name":"NEW VALLEY TOKYO","type":"caviste","city":"Tokyo","country":"Japon","address":"","notes":"Distribué par VIVIT","lat":35.69121,"lng":139.61508},{"id":"p_wine_shop_noshiro_japon","name":"WINE SHOP NOSHIRO","type":"caviste","city":"Tokyo","country":"Japon","address":"","notes":"Distribué par VIVIT","lat":35.61795,"lng":139.63887},{"id":"p_wine_shop_yukiotowine_japon","name":"WINE SHOP YUKIOTOWINE","type":"caviste","city":"Tokyo","country":"Japon","address":"","notes":"Distribué par VIVIT","lat":35.71994,"lng":139.68735},{"id":"p_born_singapour","name":"BORN*","type":"restaurant","city":"Singapour","country":"Singapour","address":"","notes":"Distribué par AUTHENTIC WINE EXPLORER","lat":1.3521,"lng":103.8198},{"id":"p_byu_wine_lounge_burgundy_champagne_focus","name":"bYu WIne Lounge (burgundy & champagne focused)","type":"bar","city":"Singapour","country":"Singapour","address":"","notes":"Distribué par AUTHENTIC WINE EXPLORER","lat":1.32714,"lng":103.81192},{"id":"p_market_hall_sentosa_singapour","name":"Market Hall Sentosa","type":"bar","city":"Singapour","country":"Singapour","address":"","notes":"Distribué par AUTHENTIC WINE EXPLORER","lat":1.36673,"lng":103.80195},{"id":"p_atlas_bar_singapour","name":"Atlas Bar","type":"bar","city":"Singapour","country":"Singapour","address":"","notes":"Distribué par AUTHENTIC WINE EXPLORER","lat":1.33332,"lng":103.84497},{"id":"p_convivial_bar_singapour","name":"CONVIVIAL BAR","type":"bar","city":"Singapour","country":"Singapour","address":"","notes":"Distribué par AUTHENTIC WINE EXPLORER","lat":1.38595,"lng":103.8041},{"id":"p_nuda_bar_slovaquie","name":"Nuda Bar","type":"restaurant","city":"Bratislava","country":"Slovaquie","address":"","notes":"Distribué par SCRIPTEASE","lat":48.1486,"lng":17.1077},{"id":"p_restaurant_irin_slovaquie","name":"Restaurant Irin","type":"restaurant","city":"Bratislava","country":"Slovaquie","address":"","notes":"Distribué par SCRIPTEASE","lat":48.12555,"lng":17.09754},{"id":"p_oma_finefood_bistro_slovaquie","name":"Oma finefood bistro","type":"bar","city":"Bratislava","country":"Slovaquie","address":"","notes":"Distribué par SCRIPTEASE","lat":48.17548,"lng":17.09405},{"id":"p_drunken_grapes_suisse","name":"DRUNKEN GRAPES","type":"epicerie","city":"","country":"Suisse","address":"","notes":"Distribué par DRUNKEN GRAPES","lat":46.8182,"lng":8.2275},{"id":"p_67_pall_mall_uk","name":"67 Pall Mall","type":"autre","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.5074,"lng":-0.1278},{"id":"p_alex_s_champagne_parlour_uk","name":"Alex's Champagne Parlour","type":"autre","city":"","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.4964,"lng":-0.14784},{"id":"p_ed_s_wine_emporium_uk","name":"Ed's Wine Emporium","type":"autre","city":"","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.52629,"lng":-0.14463},{"id":"p_maison_estelle_uk","name":"Maison Estelle","type":"autre","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.4729,"lng":-0.11821},{"id":"p_estelle_manor_uk","name":"Estelle Manor","type":"hotel","city":"North Leigh","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.827,"lng":-1.431},{"id":"p_maxine_uk","name":"Maxine","type":"autre","city":"","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.55052,"lng":-0.13301},{"id":"p_bacchanalia_wine_merchants_uk","name":"Bacchanalia Wine Merchants","type":"caviste","city":"Cambridge","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":52.2053,"lng":0.1218},{"id":"p_trinity_restaurant_uk","name":"Trinity restaurant","type":"restaurant","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.46792,"lng":-0.14843},{"id":"p_the_beerhive_uk","name":"The Beerhive","type":"autre","city":"","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.54733,"lng":-0.08358},{"id":"p_deux_six_wines_uk","name":"Deux six wines","type":"autre","city":"","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.49734,"lng":-0.1738},{"id":"p_matthew_s_wine_emporium_uk","name":"Matthew's Wine Emporium","type":"autre","city":"","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.51864,"lng":-0.19772},{"id":"p_portefolio_mcr_uk","name":"PORTEFOLIO MCR","type":"bar","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.45782,"lng":-0.07057},{"id":"p_amie_uk","name":"AMIE","type":"bar","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.56156,"lng":-0.16543},{"id":"p_alex_s_aperol_parlour_uk","name":"Alex's Aperol Parlour","type":"bar","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.40016,"lng":-0.13696},{"id":"p_drop_kensington_uk","name":"Drop kensington","type":"bar","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.61645,"lng":-0.09395},{"id":"p_the_sampler_uk","name":"The Sampler","type":"bar","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.45169,"lng":-0.2015},{"id":"p_searcys_pall_mall_uk","name":"Searcys Pall Mall","type":"bar","city":"Londres","country":"Royaume-Uni","address":"","notes":"Distribué par SIP","lat":51.55425,"lng":-0.22605}];
+
+  /* ── STORAGE (localStorage) ──────────────────────────────────────────── */
+  let places = [];
+
+  function loadPlaces(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){ places = JSON.parse(raw); }
+      else { places = JSON.parse(JSON.stringify(DEFAULT_PLACES)); savePlaces(); }
+    }catch(e){
+      places = JSON.parse(JSON.stringify(DEFAULT_PLACES));
+    }
+  }
+
+  function savePlaces(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(places)); }
+    catch(e){ showToast("Erreur d'enregistrement"); }
+  }
+
+  function uid(){ return 'p_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); }
+
+  /* ── MAP ─────────────────────────────────────────────────────────────── */
+  const map = L.map('map',{
+    zoomControl:false, attributionControl:false,
+    worldCopyJump:true, minZoom:2, maxBoundsViscosity:1.0
+  }).setView([30,10], 2.4);
+
+  // FIX: dark_all inclut les noms de villes/villages (dark_nolabels ne les affichait pas)
+  const tileLayer = L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    { subdomains:'abcd', maxZoom:19 }
+  );
+  tileLayer.on('tileerror', function(){
+    if(!map._fallbackApplied){
+      map._fallbackApplied = true;
+      map.removeLayer(tileLayer);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png',
+        { subdomains:'abcd', maxZoom:19 }).addTo(map);
+    }
+  });
+  tileLayer.addTo(map);
+
+  /* ── MARKERS ─────────────────────────────────────────────────────────── */
+  function markerIcon(sel){
+    return L.divIcon({
+      html:`<div class="hc-marker${sel?' selected':''}"></div>`,
+      className:'', iconSize:[14,14], iconAnchor:[7,7]
+    });
+  }
+
+  let markers = {};
+
+  function renderMarkers(filtered){
+    Object.values(markers).forEach(m=>map.removeLayer(m));
+    markers = {};
+    (filtered||places).forEach(p=>{
+      if(typeof p.lat!=='number'||typeof p.lng!=='number') return;
+      const m = L.marker([p.lat,p.lng],{icon:markerIcon(false)}).addTo(map);
+      m.on('click', ()=>focusPlace(p.id));
+      markers[p.id] = m;
+    });
+  }
+
+  function focusPlace(id){
+    const p = places.find(x=>x.id===id);
+    if(!p) return;
+    collapseSheet();
+    showPlacePopup(p);
+  }
+
+  /* ── TYPE METADATA ───────────────────────────────────────────────────── */
+  const typeIcons = {
+    restaurant:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="1.8"><path d="M5 3v7a3 3 0 003 3v8M8 3v7M11 3v7M16 3c-1.5 0-3 1.5-3 4s1.5 4 3 4v10" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    hotel:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="1.8"><path d="M3 21V5a1 1 0 011-1h2a1 1 0 011 1v16M3 21h18M7 21v-4a1 1 0 011-1h8a1 1 0 011 1v4M11 11h2M11 7h2M16 4h4a1 1 0 011 1v16" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    caviste:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="1.8"><path d="M8 2h8l-1 7a3 3 0 01-6 0L8 2zM12 9v8M9 21h6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    bar:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="1.8"><path d="M4 4h16l-7 8v7h3M9 19h6M9 12L4 4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    epicerie:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="1.8"><path d="M3 7l1.5-3h15L21 7M3 7h18M3 7l1 12h16l1-12M9 11a3 3 0 006 0" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    autre:`<svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="1.8"><circle cx="12" cy="9" r="3"/><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  };
+  // Variante blanche (pour badge rond sur fond coloré du popup)
+  const typeIconsWhite = {
+    restaurant:`<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M5 3v7a3 3 0 003 3v8M8 3v7M11 3v7M16 3c-1.5 0-3 1.5-3 4s1.5 4 3 4v10" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    hotel:`<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M3 21V5a1 1 0 011-1h2a1 1 0 011 1v16M3 21h18M7 21v-4a1 1 0 011-1h8a1 1 0 011 1v4M11 11h2M11 7h2M16 4h4a1 1 0 011 1v16" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    caviste:`<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M8 2h8l-1 7a3 3 0 01-6 0L8 2zM12 9v8M9 21h6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    bar:`<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M4 4h16l-7 8v7h3M9 19h6M9 12L4 4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    epicerie:`<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M3 7l1.5-3h15L21 7M3 7h18M3 7l1 12h16l1-12M9 11a3 3 0 006 0" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    autre:`<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="12" cy="9" r="3"/><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  };
+  const typeLabels = {
+    restaurant:'Restaurant', hotel:'Hôtel', caviste:'Caviste',
+    bar:'Bar à champagne', epicerie:'Épicerie fine', autre:'Autre'
+  };
+  const typeGradients = {
+    restaurant:'linear-gradient(135deg,#7c2d12,#c2410c)',
+    hotel:'linear-gradient(135deg,#312e81,#4338ca)',
+    caviste:'linear-gradient(135deg,#4a044e,#7e22ce)',
+    bar:'linear-gradient(135deg,#713f12,#b45309)',
+    epicerie:'linear-gradient(135deg,#14532d,#15803d)',
+    autre:'linear-gradient(135deg,#1e3a5f,#2569bd)',
+  };
+
+  /* ── PLACE POPUP ─────────────────────────────────────────────────────── */
+  function showPlacePopup(p){
+    if(typeof p.lat!=='number'||typeof p.lng!=='number') return;
+
+    const gradient = typeGradients[p.type]||typeGradients.autre;
+    const icon     = typeIconsWhite[p.type]||typeIconsWhite.autre;
+    const label    = (typeLabels[p.type]||'Lieu');
+    const locStr   = [p.city, p.country].filter(Boolean).join(', ');
+
+    /* Build DOM so we can attach events cleanly */
+    const wrap = document.createElement('div');
+    wrap.className = 'hc-pop';
+
+    // Photo zone : placeholder soigné (badge + filigrane), pas de vraie photo
+    const photoDiv = document.createElement('div');
+    photoDiv.className = 'hc-pop-photo';
+    photoDiv.style.background = gradient;
+    photoDiv.innerHTML = `
+      <span class="hc-pop-photo-watermark">${esc(label)}</span>
+      <div class="hc-pop-photo-placeholder">${icon}</div>
+    `;
+    wrap.appendChild(photoDiv);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'hc-pop-body';
+    body.innerHTML = `
+      <div class="hc-pop-type-row">
+        <span class="hc-pop-type-tag">${typeLabels[p.type]||'Lieu'}</span>
+      </div>
+      <div class="hc-pop-name">${esc(p.name)}</div>
+      ${locStr?`<div class="hc-pop-loc">${esc(locStr)}</div>`:''}
+      ${p.address?`<div class="hc-pop-addr">${esc(p.address)}</div>`:''}
+      ${p.notes?`<div class="hc-pop-notes">${esc(p.notes)}</div>`:''}
+    `;
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'hc-pop-edit';
+    editBtn.textContent = 'Modifier le lieu';
+    editBtn.addEventListener('click', ()=>{ map.closePopup(); openDetail(p.id); });
+    body.appendChild(editBtn);
+    wrap.appendChild(body);
+
+    L.popup({ maxWidth:280, closeButton:true, autoClose:true, closeOnClick:false })
+      .setLatLng([p.lat,p.lng])
+      .setContent(wrap)
+      .openOn(map);
+  }
+
+  /* ── LIST ────────────────────────────────────────────────────────────── */
+  const listEl    = document.getElementById('list');
+  const emptyEl   = document.getElementById('empty-state');
+  const loadingEl = document.getElementById('loading-state');
+  const countNum  = document.getElementById('count-num');
+
+  function renderList(filterText){
+    loadingEl.style.display = 'none';
+    const q = (filterText||'').trim().toLowerCase();
+    const filtered = places.filter(p=>!q||[p.name,p.city,p.country,p.address,p.notes].join(' ').toLowerCase().includes(q));
+
+    listEl.querySelectorAll('.place-row').forEach(n=>n.remove());
+    emptyEl.classList.toggle('show', filtered.length===0);
+
+    filtered.slice()
+      .sort((a,b)=>(a.country||'').localeCompare(b.country||'')||(a.city||'').localeCompare(b.city||''))
+      .forEach(p=>{
+        const row = document.createElement('div');
+        row.className='place-row'; row.dataset.id=p.id;
+        row.innerHTML=`
+          <div class="place-icon">${typeIcons[p.type]||typeIcons.autre}</div>
+          <div class="place-info">
+            <p class="place-name">${esc(p.name)}</p>
+            <p class="place-meta"><span class="type-tag">${typeLabels[p.type]||'Lieu'}</span> · ${esc(p.city)}${p.country?', '+esc(p.country):''}</p>
+          </div>
+          <div class="place-chevron">›</div>`;
+        row.addEventListener('click',()=>openDetail(p.id));
+        listEl.appendChild(row);
+      });
+
+    countNum.textContent = places.length;
+    renderMarkers(q ? filtered : null);
+  }
+
+  function esc(s){
+    return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  /* ── SHEET DRAG ──────────────────────────────────────────────────────── */
+  const sheet  = document.getElementById('sheet');
+  const handle = document.getElementById('sheet-handle');
+  let dragStartY=0, dragging=false;
+
+  const expandSheet  = ()=>sheet.classList.add('expanded');
+  const collapseSheet= ()=>sheet.classList.remove('expanded');
+
+  handle.addEventListener('touchstart',e=>{ dragging=true; dragStartY=e.touches[0].clientY; sheet.style.transition='none'; },{passive:true});
+  handle.addEventListener('touchmove',e=>{
+    if(!dragging) return;
+    const dy=e.touches[0].clientY-dragStartY;
+    const base=sheet.classList.contains('expanded')?0:(sheet.offsetHeight-118);
+    sheet.style.transform=`translateY(${Math.max(0,Math.min(sheet.offsetHeight-80,base+dy))}px)`;
+  },{passive:true});
+  handle.addEventListener('touchend',e=>{
+    dragging=false; sheet.style.transition=''; sheet.style.transform='';
+    const dy=e.changedTouches[0].clientY-dragStartY;
+    if(sheet.classList.contains('expanded')){ if(dy>80) collapseSheet(); }
+    else { if(dy<-40) expandSheet(); }
+  },{passive:true});
+  handle.addEventListener('click',()=>sheet.classList.toggle('expanded'));
+
+  document.getElementById('search-input').addEventListener('input',e=>{ expandSheet(); renderList(e.target.value); });
+  document.getElementById('search-input').addEventListener('focus', expandSheet);
+
+  /* ── GEOCODE ─────────────────────────────────────────────────────────── */
+  async function geocode(city,country){
+    const q=encodeURIComponent([city,country].filter(Boolean).join(', '));
+    if(!q) return null;
+    try{
+      const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`,{headers:{'Accept-Language':'fr'}});
+      const d=await r.json();
+      if(d&&d[0]) return {lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon)};
+    }catch(e){}
+    return null;
+  }
+
+  /* ── DETAIL / EDIT ───────────────────────────────────────────────────── */
+  const detail         = document.getElementById('detail');
+  const detailTitle    = document.getElementById('detail-title');
+  const fName          = document.getElementById('f-name');
+  const fType          = document.getElementById('f-type');
+  const fCity          = document.getElementById('f-city');
+  const fCountry       = document.getElementById('f-country');
+  const fAddress       = document.getElementById('f-address');
+  const fNotes         = document.getElementById('f-notes');
+  const deleteBtn      = document.getElementById('delete-btn');
+  const positionStatus = document.getElementById('position-status');
+  const posAction      = document.getElementById('pos-action');
+  const crosshair      = document.getElementById('pin-crosshair');
+  const pinHelper      = document.getElementById('pin-helper');
+
+  let editingId=null, pendingCoords=null, pinMode=false;
+
+  function openDetail(id){
+    editingId=id;
+    const p=places.find(x=>x.id===id);
+    detailTitle.textContent = p?'Modifier le lieu':'Nouveau lieu';
+    fName.value    = p?p.name:'';
+    fType.value    = p?p.type:'caviste';
+    fCity.value    = p?p.city:'';
+    fCountry.value = p?p.country:'';
+    fAddress.value = p?(p.address||''):'';
+    fNotes.value   = p?(p.notes||''):'';
+    pendingCoords  = p?{lat:p.lat,lng:p.lng}:null;
+    positionStatus.textContent = p?'Position définie sur la carte.':'Position automatique selon la ville saisie.';
+    deleteBtn.style.display = p?'block':'none';
+    detail.classList.add('open');
+  }
+
+  function closeDetail(){
+    detail.classList.remove('open');
+    editingId=null; pendingCoords=null;
+    exitPinMode();
+  }
+
+  document.getElementById('add-btn').addEventListener('click',()=>openDetail(null));
+  document.getElementById('detail-cancel').addEventListener('click', closeDetail);
+
+  document.getElementById('detail-save').addEventListener('click', async()=>{
+    const name=fName.value.trim(), city=fCity.value.trim(), country=fCountry.value.trim();
+    if(!name){ showToast('Indiquez un nom de lieu'); fName.focus(); return; }
+    if(!city&&!pendingCoords){ showToast('Indiquez une ville ou placez un repère'); fCity.focus(); return; }
+
+    let coords=pendingCoords;
+    if(!coords){
+      showToast('Localisation en cours…');
+      coords=await geocode(city,country);
+      if(!coords){ showToast("Ville introuvable — placez un repère"); return; }
+    }
+
+    const data={
+      id:editingId||uid(), name, type:fType.value, city, country,
+      address:fAddress.value.trim(), notes:fNotes.value.trim(),
+      lat:coords.lat, lng:coords.lng
+    };
+
+    if(editingId){
+      places[places.findIndex(x=>x.id===editingId)]=data;
+      showToast('Lieu mis à jour');
+    } else {
+      places.push(data);
+      showToast('Lieu ajouté');
+    }
+    savePlaces();
+    renderList(document.getElementById('search-input').value);
+    closeDetail();
+    map.flyTo([data.lat,data.lng],8,{duration:0.6});
+  });
+
+  deleteBtn.addEventListener('click',()=>{
+    if(!editingId) return;
+    places=places.filter(x=>x.id!==editingId);
+    savePlaces();
+    renderList(document.getElementById('search-input').value);
+    showToast('Lieu supprimé');
+    closeDetail();
+  });
+
+  posAction.addEventListener('click',e=>{ e.stopPropagation(); pinMode?confirmPin():enterPinMode(); });
+
+  function enterPinMode(){
+    pinMode=true; detail.classList.remove('open');
+    crosshair.classList.add('show'); pinHelper.classList.add('show');
+    posAction.textContent='Valider la position';
+    positionStatus.textContent='Déplacez la carte sous le repère…';
+    const c=pendingCoords||map.getCenter();
+    map.setView([c.lat,c.lng],Math.max(map.getZoom(),5));
+  }
+  function confirmPin(){
+    const c=map.getCenter();
+    pendingCoords={lat:c.lat,lng:c.lng};
+    positionStatus.textContent=`Position définie : ${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`;
+    exitPinMode(); detail.classList.add('open');
+  }
+  function exitPinMode(){
+    pinMode=false;
+    crosshair.classList.remove('show'); pinHelper.classList.remove('show');
+    posAction.textContent='Placer manuellement';
+  }
+
+  /* ── TOAST ───────────────────────────────────────────────────────────── */
+  let toastTimer;
+  function showToast(msg){
+    const t=document.getElementById('toast');
+    t.textContent=msg; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+  }
+
+  /* ── INIT ────────────────────────────────────────────────────────────── */
+  loadPlaces();
+  renderList('');
+  if(places.length){
+    const pts=places.filter(p=>p.lat&&p.lng).map(p=>[p.lat,p.lng]);
+    const b=L.latLngBounds(pts);
+    if(b.isValid()) map.fitBounds(b,{padding:[60,60],maxZoom:5});
+  }
+
+})();
+</script>
+<script>
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    });
+  }
+</script>
+</body>
+</html>
